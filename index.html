@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Snake &amp; Ladder Online — Play with Friends, AI &amp; Global Leaderboard</title>
+
+<!-- ===== SEO ===== -->
+<meta name="description" content="Play Snake &amp; Ladder online free — Pass &amp; Play, vs AI (Easy/Hard), or with friends in a private room. Emoji avatars, achievements, daily challenges and a global leaderboard. Install as an app.">
+<meta name="keywords" content="snake and ladder, snake and ladder online, play snake and ladder with friends, snake ladder multiplayer, board game online">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://your-domain.example/">
+<meta name="theme-color" content="#1F4A44">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Snake &amp; Ladder Online — Play with Friends, AI &amp; Global Leaderboard">
+<meta property="og:description" content="Classic Snake &amp; Ladder, reimagined: play vs AI, challenge friends online with a room code, unlock achievements and climb the daily leaderboard.">
+<meta property="og:image" content="https://your-domain.example/og-image.png">
+<meta property="og:url" content="https://your-domain.example/">
+<meta property="og:site_name" content="Snake &amp; Ladder Online">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Snake &amp; Ladder Online — Play with Friends &amp; AI">
+<meta name="twitter:description" content="Play Snake &amp; Ladder free: Pass &amp; Play, vs AI, or online with friends. Achievements, daily challenges, global leaderboard.">
+<meta name="twitter:image" content="https://your-domain.example/og-image.png">
+
+<!-- Favicon / PWA -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231F4A44'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle'%3E%F0%9F%90%8D%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Dark mode is applied before paint to avoid a flash of the wrong theme -->
+<script>
+  (function(){
+    try{
+      var saved = localStorage.getItem("sl_theme");
+      var wantsDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      if(wantsDark) document.documentElement.setAttribute("data-theme","dark");
+      var boardTheme = localStorage.getItem("sl_board_theme");
+      if(boardTheme) document.documentElement.setAttribute("data-board-theme", boardTheme);
+    }catch(e){}
+  })();
+</script>
+
+<!--
+  ===== ONLINE MULTIPLAYER & GLOBAL LEADERBOARD SETUP =====
+  This build uses Firebase Realtime Database (free "Spark" plan is enough).
+  1. Create a project at https://console.firebase.google.com
+  2. Build > Realtime Database > Create Database (start in test mode, then apply
+     the security rules from SETUP-GUIDE.md before going live).
+  3. Project settings > General > "Your apps" > Web app > copy the config object
+     and paste it into FIREBASE_CONFIG near the top of the main <script> below.
+  Until you do this, Online Multiplayer and the Global/Daily/Weekly leaderboard
+  tabs stay hidden automatically and the game still works fully offline.
+-->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
+
+<style>
+  :root{
+    --felt: #1F4A44;
+    --felt-dark: #143630;
+    --parchment-light: #F3E9D2;
+    --parchment-dark: #DFCBA1;
+    --ink: #2A1F14;
+    --ink-soft: #6b5b45;
+    --gold: #C99A3B;
+    --gold-light: #E4C374;
+    --maroon: #9B3A34;
+    --panel: #FBF4E4;
+    --panel-edge: #E7D8B4;
+    --p1: #D9534F;
+    --p2: #3C7A89;
+    --p3: #E3A72E;
+    --p4: #5E8C4A;
+    --radius-lg: 22px;
+    --radius-md: 14px;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  html[data-theme="dark"]{
+    --felt: #0F2926;
+    --felt-dark: #081713;
+    --parchment-light: #232320;
+    --parchment-dark: #1a1a17;
+    --ink: #EFE7D6;
+    --ink-soft: #b8ac93;
+    --panel: #23241f;
+    --panel-edge: #3a3a33;
+    --gold: #D8AE5A;
+    --gold-light: #E9CC8A;
+  }
+  html[data-board-theme="neon"]{ --felt:#150a2b; --felt-dark:#0a0518; --gold:#7CF5D4; --maroon:#FF4D9D; }
+  html[data-board-theme="sunset"]{ --felt:#3a1f2b; --felt-dark:#26131c; --gold:#F2A65A; --maroon:#D64545; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 700px at 20% -10%, rgba(255,255,255,.05), transparent 60%),
+      radial-gradient(1000px 600px at 100% 110%, rgba(0,0,0,.25), transparent 60%),
+      var(--felt);
+    background-color: var(--felt);
+    font-family: 'Nunito Sans', sans-serif;
+    color: var(--ink);
+    display:flex;
+    flex-direction: column;
+    align-items:center;
+    justify-content:flex-start;
+    padding: 24px;
+    padding-top: max(24px, env(safe-area-inset-top));
+    transition: background-color .25s ease, color .25s ease;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+  html[data-theme="dark"] .setup-wrap,
+  html[data-theme="dark"] .card,
+  html[data-theme="dark"] .board-card,
+  html[data-theme="dark"] .win-card,
+  html[data-theme="dark"] .modal-card{ background: var(--panel); border-color: var(--panel-edge); color: var(--ink); }
+  html[data-theme="dark"] .player-row,
+  html[data-theme="dark"] .player-row input{ background: var(--parchment-light); color: var(--ink); }
+
+  /* ---------- TOP BAR ---------- */
+  .top-bar{ width:100%; max-width:1180px; display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .icon-btn{
+    background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); color:#fff;
+    width:42px; height:42px; border-radius:12px; font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition: transform .12s ease, background .15s ease;
+  }
+  .icon-btn:hover{ background: rgba(255,255,255,.22); }
+  .icon-btn:active{ transform: scale(.9); }
+  .icon-btn.install-btn{ width:auto; padding:0 16px; gap:8px; font-size:14px; font-weight:800; font-family:'Nunito Sans'; }
+
+  /* ---------- AD SLOTS (replace with real AdSense units once approved) ---------- */
+  .ad-slot{
+    width:100%; max-width:1180px; margin: 0 auto 16px; text-align:center;
+    color: rgba(255,255,255,.4); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    border: 1px dashed rgba(255,255,255,.25); border-radius: 10px; padding: 8px;
+    font-family:'Nunito Sans'; font-weight:700;
+  }
+  .ad-slot.sidebar-ad{ max-width:none; }
+
+  /* ---------- AVATAR PICKER ---------- */
+  .avatar-row{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .avatar-opt{
+    width:36px; height:36px; border-radius:10px; border:2px solid var(--panel-edge); background:#fff;
+    font-size:18px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .avatar-opt.active{ border-color: var(--gold); background: var(--gold-light); }
+  .token-avatar{ font-size:15px; line-height:1; }
+  .stars{ color: var(--gold); letter-spacing:1px; font-size:12px; }
+
+  /* ---------- MODE / MODE-SPECIFIC PANELS ---------- */
+  .mode-panel{ display:none; }
+  .mode-panel.active{ display:block; }
+  .room-code-display{
+    font-family:'Baloo 2'; font-size:34px; letter-spacing:.15em; text-align:center; color: var(--felt);
+    background: #fff; border:2px dashed var(--gold); border-radius: var(--radius-md); padding: 14px; margin: 12px 0;
+  }
+  .field-input{
+    width:100%; border:2px solid var(--panel-edge); border-radius: var(--radius-md); padding:12px 14px;
+    font-family:'Nunito Sans'; font-weight:700; font-size:16px; outline:none; background:#fff; color:var(--ink);
+  }
+  .field-input:focus{ border-color: var(--gold); }
+  .row-gap{ display:flex; gap:10px; flex-wrap:wrap; }
+  .muted-text{ font-size:13px; color: var(--ink-soft); margin-top:8px; }
+  .link-btn{ background:none; border:none; color: var(--maroon); font-weight:800; text-decoration:underline; cursor:pointer; padding:0; font-size:13px; }
+
+  /* ---------- MODALS ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background: rgba(20,15,10,.6); display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:200;
+  }
+  .modal-card{
+    background: var(--panel); border:1px solid var(--panel-edge); border-radius: var(--radius-lg);
+    max-width: 560px; width:100%; max-height: 85vh; overflow-y:auto; padding: 28px; box-shadow: var(--shadow);
+  }
+  .modal-card h2{ color: var(--felt); font-size:24px; margin-bottom:6px; }
+  .modal-close{ float:right; background:none; border:none; font-size:22px; cursor:pointer; color: var(--ink-soft); }
+  .tab-row{ display:flex; gap:6px; margin: 14px 0; }
+  .tab-btn{ flex:1; padding:8px; border-radius:10px; border:2px solid var(--panel-edge); background:#fff; font-weight:800; cursor:pointer; font-size:13px; }
+  .tab-btn.active{ background: var(--felt); color:#fff; border-color:var(--felt); }
+  .stat-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:14px; }
+  .stat-box{ background:#fff; border:1px solid var(--panel-edge); border-radius:12px; padding:12px; }
+  html[data-theme="dark"] .stat-box{ background: var(--parchment-light); }
+  .stat-box .val{ font-family:'Baloo 2'; font-size:22px; color: var(--felt); }
+  .stat-box .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color: var(--ink-soft); font-weight:700; }
+  .ach-grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin-top:14px; }
+  .ach-item{ text-align:center; padding:12px 8px; border-radius:12px; border:1px solid var(--panel-edge); background:#fff; opacity:.35; }
+  .ach-item.unlocked{ opacity:1; background: var(--gold-light); border-color: var(--gold); }
+  html[data-theme="dark"] .ach-item{ background: var(--parchment-light); }
+  .ach-item .ico{ font-size:26px; }
+  .ach-item .t{ font-size:11px; font-weight:800; margin-top:4px; }
+  .lb-row{ display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; }
+  .lb-row:nth-child(odd){ background: rgba(0,0,0,.03); }
+  .achievement-toast{
+    position:fixed; top:16px; left:50%; transform: translateX(-50%) translateY(-140%);
+    background: var(--felt); color:#fff; padding: 12px 20px; border-radius: 14px; box-shadow: var(--shadow);
+    font-weight:800; display:flex; gap:10px; align-items:center; z-index:300; transition: transform .35s ease;
+  }
+  .achievement-toast.show{ transform: translateX(-50%) translateY(0); }
+
+  /* ---------- TOUCH FEEDBACK ---------- */
+  button:active{ transform: scale(.96); }
+  .pill-btn, .icon-btn, .start-btn, .roll-btn, .avatar-opt{ transition: transform .1s ease; }
+  .felt-texture{
+    position:fixed; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:overlay;
+    background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+
+  h1,h2,h3, .display{ font-family:'Baloo 2', sans-serif; margin:0; }
+  #app{ width:100%; max-width:1180px; }
+  .hidden{ display:none !important; }
+  button{ font-family: inherit; }
+
+  /* ---------- SETUP SCREEN ---------- */
+  .setup-wrap{
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 40px clamp(20px,5vw,56px);
+    max-width: 620px;
+    margin: 0 auto;
+  }
+  .brand{ text-align:center; margin-bottom: 28px; }
+  .brand .eyebrow{
+    font-family:'Nunito Sans',sans-serif; letter-spacing:.18em; text-transform:uppercase;
+    font-size:12px; font-weight:800; color: var(--maroon);
+  }
+  .brand h1{ font-size: clamp(32px, 5vw, 44px); color: var(--felt); line-height:1; margin-top:6px; }
+  .brand .snake-underline{ display:block; width:180px; height:10px; margin: 10px auto 0; }
+  .field-group{ margin-bottom: 26px; }
+  .field-label{
+    font-weight:800; font-size:14px; letter-spacing:.02em; color: var(--felt);
+    margin-bottom:10px; display:block;
+  }
+  .pill-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .pill-btn{
+    font-family:'Nunito Sans',sans-serif; font-weight:800; font-size:14px;
+    border: 2px solid var(--panel-edge); background: #fff; color: var(--ink-soft);
+    padding: 10px 18px; border-radius: 999px; cursor:pointer; transition: all .15s ease;
+    min-height:44px;
+  }
+  .pill-btn:hover{ border-color: var(--gold); }
+  .pill-btn.active{ background: var(--felt); border-color: var(--felt); color: #fff; }
+  .diff-btn small{ display:block; font-weight:600; font-size:11px; opacity:.75; margin-top:2px;}
+
+  .player-rows{ display:flex; flex-direction:column; gap:10px; }
+  .player-row{
+    display:flex; align-items:center; gap:12px;
+    background:#fff; border:2px solid var(--panel-edge); border-radius: var(--radius-md);
+    padding: 8px 10px;
+  }
+  .token-dot{ width:26px; height:26px; border-radius:50%; flex:0 0 auto; box-shadow: inset 0 -3px 4px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.3);}
+  .player-row input{
+    border:none; outline:none; font-family:'Nunito Sans'; font-weight:700; font-size:15px;
+    flex:1; background:transparent; color:var(--ink); min-width:0;
+  }
+
+  .start-btn{
+    width:100%; font-family:'Baloo 2',sans-serif; font-size:20px; font-weight:700; letter-spacing:.02em;
+    color:#fff; background: linear-gradient(180deg, var(--maroon), #7c2e29);
+    border:none; border-radius: 999px; padding: 16px; cursor:pointer;
+    box-shadow: 0 6px 0 #5f211d, 0 10px 20px rgba(0,0,0,.35);
+    transition: transform .08s ease;
+  }
+  .start-btn:active{ transform: translateY(4px); box-shadow: 0 2px 0 #5f211d; }
+
+  .scoreboard-card{
+    margin-top: 22px; padding-top: 20px; border-top: 2px dashed var(--panel-edge);
+  }
+  .scoreboard-card .sb-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .scoreboard-list{ display:flex; flex-direction:column; gap:6px; }
+  .scoreboard-row{ display:flex; align-items:center; gap:10px; font-size:14px; font-weight:700; }
+  .scoreboard-row .sb-rank{ width:20px; text-align:center; }
+  .scoreboard-row .sb-name{ flex:1; }
+  .scoreboard-row .sb-wins{ color: var(--ink-soft); }
+  .sb-reset{
+    font-family:'Nunito Sans'; font-weight:800; font-size:12px; color: var(--ink-soft);
+    background:none; border: 1px solid var(--panel-edge); border-radius:999px; padding:6px 12px; cursor:pointer;
+  }
+  .sb-empty{ font-size:13px; color: var(--ink-soft); font-style:italic; }
+
+  /* ---------- GAME SCREEN ---------- */
+  .game-layout{
+    display:grid; grid-template-columns: minmax(0,1fr) 300px; gap: 24px; align-items:start;
+  }
+  @media (max-width: 860px){ .game-layout{ grid-template-columns: 1fr; } }
+
+  .board-card{
+    background: var(--parchment-light); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+    padding: clamp(10px, 2vw, 18px); position:relative;
+  }
+  .board-header{ display:flex; align-items:center; justify-content:space-between; padding: 4px 8px 14px; }
+  .board-header h1{ color: var(--felt); font-size: 24px; }
+  .board-header .diff-tag{
+    font-family:'Nunito Sans'; font-weight:800; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    background: var(--felt); color:#fff; padding:5px 12px; border-radius:999px;
+  }
+
+  .board-frame{
+    position:relative; width:100%; aspect-ratio: 1/1; border-radius: 10px; overflow:hidden;
+    border: 6px solid var(--gold); box-shadow: 0 0 0 2px var(--felt-dark), inset 0 0 20px rgba(0,0,0,.15);
+  }
+  .board-grid{ position:absolute; inset:0; display:grid; grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(10, 1fr); }
+  .square{
+    display:flex; align-items:flex-start; justify-content:flex-end;
+    font-family:'Nunito Sans'; font-weight:700; font-size: clamp(8px, 1.4vw, 12px);
+    color: rgba(42,31,20,.45); padding: 3px 4px; background: var(--parchment-light);
+  }
+  .square.dark{ background: var(--parchment-dark); }
+  .square.start{ background: #cfe3c9; }
+  .square.finish{ background: var(--gold-light); }
+
+  .board-svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .ladder-rail{ stroke: #8a5a2b; stroke-width: .9; fill:none; stroke-linecap:round; }
+  .ladder-rung{ stroke: #c98f45; stroke-width: .8; stroke-linecap:round; }
+  .snake-eye{ fill:#fff; }
+  .snake-pupil{ fill:#1a1a1a; }
+
+  .token-layer{ position:absolute; inset:0; }
+  .token{
+    position:absolute; width: 7.2%; height:7.2%; border-radius:50%;
+    box-shadow: inset 0 -3px 4px rgba(0,0,0,.3), 0 3px 6px rgba(0,0,0,.4);
+    border: 2px solid rgba(255,255,255,.85);
+    transition: left .32s cubic-bezier(.4,0,.2,1), top .32s cubic-bezier(.4,0,.2,1);
+    transform: translate(-50%,-50%); z-index: 5;
+  }
+  .token.climbing{ transition: left .8s ease, top .8s ease; z-index:6; }
+  .token.sliding{ transition: left .9s cubic-bezier(.7,0,.3,1), top .9s cubic-bezier(.7,0,.3,1); z-index:6; }
+  .token.token-avatar{ display:flex; align-items:center; justify-content:center; font-size: 11px; line-height:1; }
+
+  /* ---------- SIDE PANEL ---------- */
+  .panel{ display:flex; flex-direction:column; gap:16px; }
+  .card{
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow); padding: 18px;
+  }
+  .turn-banner{ display:flex; align-items:center; gap:12px; justify-content:space-between; }
+  .turn-banner-left{ display:flex; align-items:center; gap:12px; }
+  .turn-banner .dot{ width:18px; height:18px; border-radius:50%; box-shadow: inset 0 -2px 3px rgba(0,0,0,.3); }
+  .turn-banner .label{ font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color: var(--ink-soft); }
+  .turn-banner .name{ font-family:'Baloo 2'; font-size:20px; color:var(--felt); }
+  .mute-btn{
+    width:38px; height:38px; border-radius:50%; border:2px solid var(--panel-edge); background:#fff;
+    cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .mute-btn.muted{ opacity:.5; }
+
+  .dice-area{ display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .dice-scene{ width: clamp(64px,14vw,80px); height: clamp(64px,14vw,80px); perspective: 500px; }
+  .cube{
+    position:relative; width:100%; height:100%; transform-style: preserve-3d;
+    transition: transform .85s cubic-bezier(.2,.8,.25,1);
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+  .face{
+    position:absolute; inset:0; background: linear-gradient(145deg,#E4483F,#8f221b);
+    border-radius: 14px; display:grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr);
+    padding: 12%; box-shadow: inset 0 0 0 2px rgba(0,0,0,.18), inset 0 2px 4px rgba(255,255,255,.25);
+    border: 2px solid var(--gold);
+  }
+  .face-top{ filter: brightness(1.22); }
+  .face-front, .face-back{ filter: brightness(1.02); }
+  .face-right, .face-left{ filter: brightness(.88); }
+  .face-bottom{ filter: brightness(.72); }
+  .pip{ align-self:center; justify-self:center; width:16%; height:16%; border-radius:50%; background:transparent; }
+  .pip.on{ background: #fff; box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 0 2px rgba(255,255,255,.6); }
+
+  .roll-btn{
+    font-family:'Baloo 2'; font-size:18px; font-weight:700; color:#fff;
+    background: linear-gradient(180deg, var(--felt), var(--felt-dark));
+    border:none; border-radius:999px; padding:14px 30px; cursor:pointer;
+    box-shadow: 0 5px 0 #0d2521, 0 8px 16px rgba(0,0,0,.3);
+    transition: transform .08s ease, opacity .2s ease;
+    min-height:48px; width:100%;
+  }
+  .roll-btn:active{ transform: translateY(3px); box-shadow: 0 2px 0 #0d2521; }
+  .roll-btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .roll-hint{ font-size:11px; color: var(--ink-soft); text-align:center; }
+
+  .toast{ min-height: 20px; font-weight:700; font-size:13.5px; color: var(--maroon); text-align:center; }
+
+  .players-list{ display:flex; flex-direction:column; gap:10px; }
+  .player-card{
+    display:flex; align-items:center; gap:10px; padding: 8px 10px; border-radius: var(--radius-md);
+    background: #fff; border: 2px solid transparent;
+  }
+  .player-card.active{ border-color: var(--gold); background: #fff8e8; }
+  .player-card .dot{ width:20px; height:20px; border-radius:50%; box-shadow: inset 0 -2px 3px rgba(0,0,0,.3); flex:0 0 auto; }
+  .player-card .pname{ font-weight:800; font-size:14px; flex:1; }
+  .player-card .ppos{ font-weight:700; font-size:13px; color: var(--ink-soft); }
+
+  .history-card h3{ font-size:14px; color: var(--felt); margin-bottom:10px; }
+  .history-list{
+    display:flex; flex-direction:column-reverse; gap:6px; max-height: 160px; overflow-y:auto; padding-right:4px;
+  }
+  .history-list::-webkit-scrollbar{ width:6px; }
+  .history-list::-webkit-scrollbar-thumb{ background: var(--panel-edge); border-radius:4px; }
+  .history-item{ font-size:12.5px; color: var(--ink-soft); line-height:1.4; border-left:3px solid var(--panel-edge); padding-left:8px; }
+  .history-item.new{ color: var(--ink); border-left-color: var(--gold); }
+
+  .rules-note{ font-size:12px; color:var(--ink-soft); line-height:1.5; }
+  .restart-btn{
+    font-family:'Nunito Sans'; font-weight:800; font-size:13px; color: var(--maroon);
+    background:none; border: 2px solid var(--maroon); border-radius:999px; padding:9px 16px; cursor:pointer;
+    min-height:40px;
+  }
+  .restart-btn:hover{ background: var(--maroon); color:#fff; }
+
+  @media (max-width: 480px){
+    body{ padding: 12px; }
+    .setup-wrap{ padding: 28px 20px; }
+    .card{ padding: 14px; }
+  }
+
+  /* ---------- WIN OVERLAY ---------- */
+  #win-overlay{
+    position:fixed; inset:0; background: rgba(20,30,28,.78);
+    display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; overflow-y:auto;
+  }
+  .win-card{
+    background: var(--panel); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+    padding: 36px clamp(20px,5vw,46px); text-align:center; max-width:440px; width:100%;
+  }
+  .win-card h2{ color: var(--felt); font-size: 28px; margin-bottom:4px; }
+  .win-card .win-sub{ color: var(--ink-soft); font-weight:700; margin-bottom: 22px; font-size:14px; }
+
+  .podium{ display:flex; align-items:flex-end; justify-content:center; gap:10px; margin: 20px 0 24px; }
+  .podium-col{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; max-width:110px; }
+  .podium-medal{ font-size:22px; }
+  .podium-name{ font-weight:800; font-size:13px; color: var(--ink); }
+  .podium-bar{ width:100%; border-radius: 8px 8px 0 0; box-shadow: inset 0 3px 6px rgba(0,0,0,.15); }
+  .podium-col.rank1 .podium-bar{ height: 90px; }
+  .podium-col.rank2 .podium-bar{ height: 62px; }
+  .podium-col.rank3 .podium-bar{ height: 42px; }
+  .podium-pos{ font-size:11px; font-weight:700; color: var(--ink-soft); }
+
+  .extra-standings{ display:flex; flex-direction:column; gap:6px; margin-bottom: 22px; }
+  .extra-row{ display:flex; align-items:center; gap:10px; font-size:13px; font-weight:700; color: var(--ink-soft); }
+  .extra-row .dot{ width:14px; height:14px; border-radius:50%; }
+</style>
+</head>
+<body>
+<div class="felt-texture"></div>
+
+<div class="top-bar">
+  <button class="icon-btn" id="lang-btn" title="Language">EN</button>
+  <button class="icon-btn" id="stats-btn" title="Statistics">📊</button>
+  <button class="icon-btn" id="achievements-btn" title="Achievements">🏅</button>
+  <button class="icon-btn" id="theme-btn" title="Toggle dark mode">🌙</button>
+  <button class="icon-btn" id="fullscreen-btn" title="Fullscreen">⛶</button>
+  <button class="icon-btn install-btn hidden" id="install-btn" title="Install app">⬇️ <span data-i18n="install">Install App</span></button>
+</div>
+
+<div class="ad-slot" id="ad-slot-top">
+  <!-- AdSense header banner: paste your <ins class="adsbygoogle"> unit here once approved -->
+  Ad space (728×90 / responsive)
+</div>
+
+<div id="app">
+
+  <!-- SETUP SCREEN -->
+  <div id="setup-screen">
+    <div class="setup-wrap">
+      <div class="brand">
+        <span class="eyebrow" data-i18n="eyebrow">Play Your Way</span>
+        <h1>Snake &amp; Ladder</h1>
+        <svg class="snake-underline" viewBox="0 0 180 10"><path d="M2,5 Q 25,0 45,5 T 90,5 T 135,5 T 178,5" stroke="#9B3A34" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+      </div>
+
+      <button class="link-btn hidden" id="resume-btn" style="display:block;margin:0 auto 18px;text-align:center;">↩ Resume last game</button>
+
+      <div class="field-group">
+        <span class="field-label" data-i18n="gameMode">Game Mode</span>
+        <div class="pill-row" id="mode-row">
+          <button class="pill-btn" data-mode="local">👥 Pass &amp; Play</button>
+          <button class="pill-btn" data-mode="ai">🤖 Vs AI</button>
+          <button class="pill-btn" data-mode="online">🌍 Online Friends</button>
+        </div>
+      </div>
+
+      <!-- LOCAL / AI SETUP -->
+      <div class="mode-panel" id="panel-local-ai">
+        <div class="field-group" id="ai-diff-group" style="display:none;">
+          <span class="field-label">AI Opponent</span>
+          <div class="pill-row" id="ai-difficulty-row">
+            <button class="pill-btn ai-diff-btn active" data-ai="easy">🙂 Easy <small>Relaxed, friendly</small></button>
+            <button class="pill-btn ai-diff-btn" data-ai="hard">😤 Hard <small>Fast &amp; confident</small></button>
+          </div>
+          <p class="muted-text">Snake &amp; Ladder is a game of luck — the dice are always fair. AI difficulty changes its pace, commentary and confidence, not the odds.</p>
+        </div>
+
+        <div class="field-group" id="player-count-group">
+          <span class="field-label" data-i18n="howManyPlayers">How many players?</span>
+          <div class="pill-row" id="player-count-row">
+            <button class="pill-btn" data-count="2">2 Players</button>
+            <button class="pill-btn" data-count="3">3 Players</button>
+            <button class="pill-btn" data-count="4">4 Players</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <span class="field-label" data-i18n="boardStyle">Board Style</span>
+          <div class="pill-row" id="difficulty-row">
+            <button class="pill-btn diff-btn" data-diff="easy">Easy <small>More ladders</small></button>
+            <button class="pill-btn diff-btn" data-diff="medium">Medium <small>Balanced</small></button>
+            <button class="pill-btn diff-btn" data-diff="hard">Hard <small>More snakes</small></button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <span class="field-label" data-i18n="playerNames">Players</span>
+          <div class="player-rows" id="player-rows"></div>
+        </div>
+
+        <button class="start-btn" id="start-btn" data-i18n="rollToBegin">Roll to Begin</button>
+      </div>
+
+      <!-- ONLINE SETUP -->
+      <div class="mode-panel" id="panel-online">
+        <div id="online-unconfigured" class="field-group">
+          <p class="muted-text">Online play needs a free Firebase project connected. See <strong>SETUP-GUIDE.md</strong> in your download for the 5-minute setup, then paste your config into <code>FIREBASE_CONFIG</code> near the top of the script.</p>
+        </div>
+        <div id="online-configured" class="hidden">
+          <div class="field-group">
+            <span class="field-label">Your name</span>
+            <input class="field-input" id="online-name-input" maxlength="16" placeholder="Your name">
+            <div class="avatar-row" id="online-avatar-row"></div>
+          </div>
+          <div class="row-gap">
+            <button class="start-btn" id="create-room-btn" style="flex:1;">➕ Create Room</button>
+          </div>
+          <div style="text-align:center;margin:14px 0;color:var(--ink-soft);font-weight:800;">— or —</div>
+          <div class="field-group">
+            <span class="field-label">Room Code</span>
+            <input class="field-input" id="join-code-input" maxlength="6" placeholder="e.g. 834521" inputmode="numeric">
+          </div>
+          <button class="start-btn" id="join-room-btn">🔗 Join Room</button>
+
+          <div id="room-lobby" class="hidden" style="margin-top:20px;">
+            <div class="room-code-display" id="room-code-display">------</div>
+            <p class="muted-text" style="text-align:center;">Share this code with a friend. The host starts the game once everyone has joined.</p>
+            <div class="players-list" id="room-players-list"></div>
+            <button class="start-btn hidden" id="room-start-btn">Start Game</button>
+            <button class="link-btn" id="room-leave-btn" style="display:block;margin:12px auto 0;">Leave room</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="daily-challenge-card" style="background:#fff;border:1px solid var(--panel-edge);border-radius:var(--radius-md);padding:14px 16px;margin-top:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong style="color:var(--felt);">🎯 Today's Challenge</strong>
+          <span id="daily-status" style="font-size:12px;font-weight:800;color:var(--ink-soft);"></span>
+        </div>
+        <p id="daily-desc" style="margin:6px 0 0;font-size:14px;color:var(--ink-soft);"></p>
+      </div>
+
+      <div class="scoreboard-card" id="scoreboard-card">
+        <div class="sb-head">
+          <span class="field-label" style="margin:0;">🏆 Leaderboard</span>
+          <button class="sb-reset" id="sb-reset-btn">Reset</button>
+        </div>
+        <div class="tab-row" id="leaderboard-tabs">
+          <button class="tab-btn active" data-lb="local">This Device</button>
+          <button class="tab-btn" data-lb="daily">Daily</button>
+          <button class="tab-btn" data-lb="weekly">Weekly</button>
+          <button class="tab-btn" data-lb="global">Global</button>
+        </div>
+        <div class="scoreboard-list" id="scoreboard-list">
+          <span class="sb-empty">No games played yet.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen" class="hidden">
+    <div class="game-layout">
+      <div class="board-card">
+        <div class="board-header">
+          <h1>Snake &amp; Ladder</h1>
+          <span class="diff-tag" id="diff-tag">Easy</span>
+        </div>
+        <div class="board-frame">
+          <div class="board-grid" id="board-grid"></div>
+          <svg class="board-svg" id="board-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+          <div class="token-layer" id="token-layer"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="card turn-banner">
+          <div class="turn-banner-left">
+            <span class="dot" id="turn-dot"></span>
+            <div>
+              <div class="label">Current Turn</div>
+              <div class="name" id="turn-name">—</div>
+            </div>
+          </div>
+          <button class="mute-btn" id="mute-btn" title="Toggle sound">🔊</button>
+        </div>
+
+        <div class="card dice-area">
+          <div class="dice-scene">
+            <div class="cube" id="dice-cube">
+              <div class="face face-front" id="face-1"></div>
+              <div class="face face-back" id="face-6"></div>
+              <div class="face face-right" id="face-2"></div>
+              <div class="face face-left" id="face-5"></div>
+              <div class="face face-top" id="face-3"></div>
+              <div class="face face-bottom" id="face-4"></div>
+            </div>
+          </div>
+          <button class="roll-btn" id="roll-btn">Roll Dice</button>
+          <span class="roll-hint">Press space to roll</span>
+          <div class="toast" id="toast"></div>
+        </div>
+
+        <div class="card">
+          <div class="players-list" id="players-list"></div>
+        </div>
+
+        <div class="card history-card">
+          <h3>Move History</h3>
+          <div class="history-list" id="history-list"></div>
+        </div>
+
+        <div class="card">
+          <span class="field-label" style="margin-bottom:8px;">🎨 Board Theme</span>
+          <div class="pill-row" id="board-theme-row">
+            <button class="pill-btn" data-theme-name="classic">Classic</button>
+            <button class="pill-btn" data-theme-name="neon">Neon</button>
+            <button class="pill-btn" data-theme-name="sunset">Sunset</button>
+          </div>
+        </div>
+
+        <div class="ad-slot sidebar-ad">
+          <!-- AdSense sidebar unit placeholder -->
+          Ad space (300×250)
+        </div>
+
+        <div class="card">
+          <p class="rules-note">Roll a 6 for an extra turn. Three 6s in a row forfeits your move. You must land exactly on 100 to win.</p>
+          <div class="row-gap" style="margin-top:12px;">
+            <button class="restart-btn" id="restart-btn" style="flex:1;">Restart Game</button>
+            <button class="icon-btn" id="save-exit-btn" title="Save &amp; exit">💾</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="ad-slot" id="ad-slot-footer">
+  <!-- AdSense footer banner placeholder -->
+  Ad space (728×90 / responsive)
+</div>
+
+<!-- WIN OVERLAY -->
+<div id="win-overlay" class="hidden">
+  <div class="win-card">
+    <h2 id="win-title">Winner!</h2>
+    <p class="win-sub" id="win-sub">Final standings</p>
+    <div class="podium" id="podium"></div>
+    <div class="extra-standings" id="extra-standings"></div>
+    <div class="row-gap" style="justify-content:center;margin-top:14px;">
+      <button class="start-btn" id="play-again-btn" style="flex:1;">Play Again</button>
+      <button class="icon-btn" id="share-score-btn" title="Share result">📤</button>
+    </div>
+  </div>
+</div>
+
+<!-- STATS MODAL -->
+<div class="modal-overlay hidden" id="stats-modal">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal="stats-modal">×</button>
+    <h2>📊 Your Statistics</h2>
+    <div class="stat-grid" id="stat-grid"></div>
+  </div>
+</div>
+
+<!-- ACHIEVEMENTS MODAL -->
+<div class="modal-overlay hidden" id="achievements-modal">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal="achievements-modal">×</button>
+    <h2>🏅 Achievements</h2>
+    <div class="ach-grid" id="ach-grid"></div>
+  </div>
+</div>
+
+<div class="achievement-toast" id="achievement-toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     FIREBASE CONFIG — paste your own project's config below to
+     unlock Online Multiplayer + Daily/Weekly/Global leaderboards.
+     Get this from Firebase Console > Project Settings > Your apps.
+     Everything else in this file works with this left untouched.
+     ========================================================= */
+  var FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+  var FIREBASE_READY = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+
+  /* Optional: point this at an mp3/ogg you have rights to use for
+     background music. Leave blank to keep the music toggle inert. */
+  var MUSIC_URL = "";
+
+  var COLORS = ["#D9534F", "#3C7A89", "#E3A72E", "#5E8C4A"];
+  var AVATARS = ["😀","😎","🤖","👑","🐯","🐼","🦊","🐸","🐵","🦁","🐧","🦄"];
+
+  var LEVELS = {
+    easy: {
+      ladders: {3:22, 8:30, 21:42, 27:84, 36:57, 51:67, 65:83, 71:91},
+      snakes:  {17:4, 54:34, 62:19, 98:79, 45:23}
+    },
+    medium: {
+      ladders: {4:14, 9:31, 20:38, 40:59, 51:72, 63:84},
+      snakes:  {17:3, 54:34, 62:19, 64:60, 87:24, 93:73, 76:55}
+    },
+    hard: {
+      ladders: {9:31, 40:59, 63:81},
+      snakes:  {17:3, 54:34, 62:19, 64:60, 87:24, 93:73, 95:75, 98:79, 49:11, 16:6, 47:26, 74:53, 44:22, 91:71}
+    }
+  };
+
+  var state = {
+    mode: "local",            // local | ai | online
+    aiDifficulty: "easy",     // easy | hard
+    numPlayers: 2,
+    difficulty: "easy",
+    players: [],
+    currentIndex: 0,
+    consecutiveSixes: 0,
+    busy: false,
+    level: null,
+    muted: false,
+    history: [],
+    rollsThisGame: 0,
+    snakeHitsThisGame: 0
+  };
+
+  /* ---------------- LOCAL STORAGE HELPERS (works on any host) ---------------- */
+  function lsGet(key, fallback){
+    try{
+      var raw = localStorage.getItem(key);
+      if(raw === null) return fallback;
+      return JSON.parse(raw);
+    }catch(e){ return fallback; }
+  }
+  function lsSet(key, value){
+    try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){}
+  }
+  function lsDel(key){ try{ localStorage.removeItem(key); }catch(e){} }
+
+  function getPlayerId(){
+    var id = localStorage.getItem("sl_player_id");
+    if(!id){
+      id = "p_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+      localStorage.setItem("sl_player_id", id);
+    }
+    return id;
+  }
+
+  /* ---------------- i18n (EN / HI) ---------------- */
+  var I18N = {
+    en: {
+      eyebrow: "Play Your Way", gameMode: "Game Mode", howManyPlayers: "How many players?",
+      boardStyle: "Board Style", playerNames: "Players", rollToBegin: "Roll to Begin", install: "Install App"
+    },
+    hi: {
+      eyebrow: "अपने अंदाज़ में खेलें", gameMode: "गेम मोड", howManyPlayers: "कितने खिलाड़ी?",
+      boardStyle: "बोर्ड स्टाइल", playerNames: "खिलाड़ी", rollToBegin: "शुरू करें", install: "ऐप इंस्टॉल करें"
+    }
+  };
+  var currentLang = lsGet("sl_lang", "en");
+  function applyI18n(){
+    var dict = I18N[currentLang] || I18N.en;
+    document.querySelectorAll("[data-i18n]").forEach(function(el){
+      var key = el.getAttribute("data-i18n");
+      if(dict[key]) el.textContent = dict[key];
+    });
+    document.getElementById("lang-btn").textContent = currentLang.toUpperCase();
+  }
+  document.getElementById("lang-btn").addEventListener("click", function(){
+    currentLang = currentLang === "en" ? "hi" : "en";
+    lsSet("sl_lang", currentLang);
+    applyI18n();
+  });
+
+  /* ---------------- ACHIEVEMENTS ---------------- */
+  var ACHIEVEMENTS = [
+    { id:"first_win",  icon:"🏆", title:"First Win",     desc:"Win your first game" },
+    { id:"ten_wins",   icon:"🏆", title:"10 Wins",        desc:"Win 10 games" },
+    { id:"lucky",      icon:"🎲", title:"Lucky Roller",   desc:"Roll three 6s in one game" },
+    { id:"survivor",   icon:"🐍", title:"Snake Survivor", desc:"Win a game after 3+ snake bites" },
+    { id:"speedrun",   icon:"⚡", title:"Speedrunner",    desc:"Win in 20 rolls or fewer" },
+    { id:"streak",     icon:"🔥", title:"On a Streak",    desc:"Complete 3 daily challenges in a row" }
+  ];
+  var stats = lsGet("sl_stats", {
+    gamesPlayed:0, gamesWon:0, totalRolls:0, sumDice:0,
+    highestLadder:0, biggestSnake:0, fastestWin:null, achievements:{}
+  });
+  function saveStats(){ lsSet("sl_stats", stats); }
+
+  function unlockAchievement(id){
+    if(stats.achievements[id]) return;
+    stats.achievements[id] = true;
+    saveStats();
+    var def = ACHIEVEMENTS.filter(function(a){ return a.id === id; })[0];
+    if(!def) return;
+    var toast = document.getElementById("achievement-toast");
+    toast.innerHTML = "<span style='font-size:22px;'>" + def.icon + "</span><span>Achievement unlocked: <strong>" + def.title + "</strong></span>";
+    toast.classList.add("show");
+    setTimeout(function(){ toast.classList.remove("show"); }, 3200);
+  }
+
+  function renderAchievements(){
+    var grid = document.getElementById("ach-grid");
+    grid.innerHTML = ACHIEVEMENTS.map(function(a){
+      var unlocked = !!stats.achievements[a.id];
+      return '<div class="ach-item' + (unlocked ? ' unlocked' : '') + '"><div class="ico">' + a.icon + '</div><div class="t">' + a.title + '</div><div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">' + a.desc + '</div></div>';
+    }).join("");
+  }
+  function renderStats(){
+    var winPct = stats.gamesPlayed ? Math.round((stats.gamesWon / stats.gamesPlayed) * 100) : 0;
+    var avgDice = stats.totalRolls ? (stats.sumDice / stats.totalRolls).toFixed(1) : "—";
+    var grid = document.getElementById("stat-grid");
+    var cells = [
+      ["Games Played", stats.gamesPlayed],
+      ["Win %", winPct + "%"],
+      ["Average Dice", avgDice],
+      ["Highest Ladder", stats.highestLadder || "—"],
+      ["Biggest Snake", stats.biggestSnake || "—"],
+      ["Fastest Win", stats.fastestWin ? stats.fastestWin + " rolls" : "—"]
+    ];
+    grid.innerHTML = cells.map(function(c){
+      return '<div class="stat-box"><div class="val">' + c[1] + '</div><div class="lbl">' + c[0] + '</div></div>';
+    }).join("");
+  }
+  document.getElementById("stats-btn").addEventListener("click", function(){ renderStats(); document.getElementById("stats-modal").classList.remove("hidden"); });
+  document.getElementById("achievements-btn").addEventListener("click", function(){ renderAchievements(); document.getElementById("achievements-modal").classList.remove("hidden"); });
+  document.querySelectorAll("[data-close-modal]").forEach(function(btn){
+    btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close-modal")).classList.add("hidden"); });
+  });
+  document.querySelectorAll(".modal-overlay").forEach(function(ov){
+    ov.addEventListener("click", function(e){ if(e.target === ov) ov.classList.add("hidden"); });
+  });
+
+  /* ---------------- DAILY CHALLENGE ---------------- */
+  var CHALLENGE_TEMPLATES = [
+    { desc: "Win in under 25 rolls.", check: function(rolls, won){ return won && rolls < 25; } },
+    { desc: "Win without hitting a single snake.", check: function(rolls, won, snakeHits){ return won && snakeHits === 0; } },
+    { desc: "Win in under 20 rolls.", check: function(rolls, won){ return won && rolls < 20; } }
+  ];
+  function todayKey(){ return new Date().toISOString().slice(0,10); }
+  function dayOfYear(){
+    var now = new Date();
+    var start = new Date(now.getFullYear(),0,0);
+    return Math.floor((now - start) / 86400000);
+  }
+  function getTodaysChallenge(){ return CHALLENGE_TEMPLATES[dayOfYear() % CHALLENGE_TEMPLATES.length]; }
+  function renderDailyChallenge(){
+    var progress = lsGet("sl_daily_progress", {});
+    var done = progress[todayKey()];
+    document.getElementById("daily-desc").textContent = getTodaysChallenge().desc;
+    document.getElementById("daily-status").textContent = done ? "✅ Completed" : "In progress";
+  }
+  function checkDailyChallenge(rolls, won, snakeHits){
+    var progress = lsGet("sl_daily_progress", {});
+    var key = todayKey();
+    if(progress[key]) return;
+    if(getTodaysChallenge().check(rolls, won, snakeHits)){
+      progress[key] = true;
+      lsSet("sl_daily_progress", progress);
+      var streak = lsGet("sl_daily_streak", 0) + 1;
+      lsSet("sl_daily_streak", streak);
+      if(streak >= 3) unlockAchievement("streak");
+      renderDailyChallenge();
+    }
+  }
+  renderDailyChallenge();
+
+  /* ---------------- AUDIO ---------------- */
+  var audioCtx = null;
+  function getCtx(){
+    if(state.muted) return null;
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    }
+    return audioCtx;
+  }
+  function tone(freq, start, dur, type, peakGain){
+    var ctx = getCtx();
+    if(!ctx) return;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    var t0 = ctx.currentTime + start;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(peakGain || 0.15, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+  function sfxRoll(){ tone(300,0,0.09,"square",0.07); tone(360,0.1,0.09,"square",0.07); tone(420,0.2,0.09,"square",0.06); }
+  function sfxLadder(){ [0,0.11,0.22,0.33].forEach(function(t,i){ tone(440 + i*110, t, 0.2, "triangle", 0.12); }); }
+  function sfxSnake(){
+    var ctx = getCtx();
+    if(!ctx) return;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    var t0 = ctx.currentTime;
+    osc.frequency.setValueAtTime(520, t0);
+    osc.frequency.exponentialRampToValueAtTime(110, t0 + 0.55);
+    gain.gain.setValueAtTime(0.11, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.55);
+    osc.start(t0);
+    osc.stop(t0 + 0.58);
+  }
+  function sfxWin(){ [0,0.15,0.3,0.5].forEach(function(t,i){ tone([523,659,784,1047][i], t, 0.4, "triangle", 0.14); }); }
+
+  var muteBtn = document.getElementById("mute-btn");
+  muteBtn.addEventListener("click", function(){
+    state.muted = !state.muted;
+    muteBtn.textContent = state.muted ? "🔇" : "🔊";
+    muteBtn.classList.toggle("muted", state.muted);
+  });
+
+  /* ---------------- SCOREBOARD / LEADERBOARD ---------------- */
+  var scoreboardList = document.getElementById("scoreboard-list");
+  var currentLbTab = "local";
+
+  function loadScoreboard(){ return lsGet("sl_scoreboard", {}); }
+  function saveScoreboard(obj){ lsSet("sl_scoreboard", obj); }
+  function escapeHtml(s){
+    var div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+  function renderLocalScoreboard(){
+    var sb = loadScoreboard();
+    var names = Object.keys(sb);
+    if(names.length === 0){
+      scoreboardList.innerHTML = '<span class="sb-empty">No games played yet.</span>';
+      return;
+    }
+    names.sort(function(a,b){ return sb[b] - sb[a]; });
+    var medals = ["🥇","🥈","🥉"];
+    scoreboardList.innerHTML = names.slice(0,6).map(function(name, i){
+      var rank = medals[i] || (i+1) + ".";
+      return '<div class="scoreboard-row"><span class="sb-rank">'+rank+'</span><span class="sb-name">'+escapeHtml(name)+'</span><span class="sb-wins">'+sb[name]+' win'+(sb[name]===1?"":"s")+'</span></div>';
+    }).join("");
+  }
+  function renderRemoteScoreboard(rows){
+    if(!rows || !rows.length){
+      scoreboardList.innerHTML = '<span class="sb-empty">No games recorded yet — be the first!</span>';
+      return;
+    }
+    var medals = ["🥇","🥈","🥉"];
+    scoreboardList.innerHTML = rows.slice(0,10).map(function(row, i){
+      var rank = medals[i] || (i+1) + ".";
+      return '<div class="scoreboard-row"><span class="sb-rank">'+rank+'</span><span class="sb-name">'+(row.avatar||"🙂")+' '+escapeHtml(row.name)+'</span><span class="sb-wins">'+row.wins+' win'+(row.wins===1?"":"s")+'</span></div>';
+    }).join("");
+  }
+  function recordWin(name, avatar){
+    var sb = loadScoreboard();
+    sb[name] = (sb[name] || 0) + 1;
+    saveScoreboard(sb);
+    if(currentLbTab === "local") renderLocalScoreboard();
+    recordRemoteWin(name, avatar);
+  }
+  document.getElementById("sb-reset-btn").addEventListener("click", function(){
+    lsDel("sl_scoreboard");
+    if(currentLbTab === "local") renderLocalScoreboard();
+  });
+  document.getElementById("leaderboard-tabs").addEventListener("click", function(e){
+    var btn = e.target.closest(".tab-btn");
+    if(!btn) return;
+    Array.prototype.forEach.call(document.getElementById("leaderboard-tabs").children, function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    currentLbTab = btn.dataset.lb;
+    if(currentLbTab === "local"){
+      renderLocalScoreboard();
+    } else if(!FIREBASE_READY){
+      scoreboardList.innerHTML = '<span class="sb-empty">Connect Firebase (see SETUP-GUIDE.md) to unlock the '+currentLbTab+' leaderboard.</span>';
+    } else {
+      scoreboardList.innerHTML = '<span class="sb-empty">Loading…</span>';
+      loadRemoteLeaderboard(currentLbTab).then(renderRemoteScoreboard);
+    }
+  });
+  if(!FIREBASE_READY){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-lb]:not([data-lb="local"])'), function(b){ b.title = "Needs Firebase setup — see SETUP-GUIDE.md"; });
+  }
+  renderLocalScoreboard();
+
+  /* ================= FIREBASE (online play + global leaderboard) =================
+     Everything in this block is a no-op until FIREBASE_CONFIG above is filled in,
+     so the game degrades gracefully to offline-only. */
+  var fbApp = null, fbDb = null;
+  function fbInit(){
+    if(!FIREBASE_READY || fbApp) return fbApp;
+    try{
+      if(typeof firebase === "undefined") return null; // SDK still loading (loaded with defer)
+      fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+      fbDb = firebase.database();
+    }catch(e){ console.warn("Firebase init failed:", e); }
+    return fbApp;
+  }
+
+  function recordRemoteWin(name, avatar){
+    if(!FIREBASE_READY) return;
+    window.addEventListener("load", function tryInit(){
+      if(!fbInit() || !fbDb) return;
+      var pid = getPlayerId();
+      var day = todayKey();
+      var wk = (function(){ var d=new Date(); var onejan=new Date(d.getFullYear(),0,1); var week=Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7); return d.getFullYear()+"-W"+week; })();
+      ["leaderboard_global/","leaderboard_daily/"+day+"/","leaderboard_weekly/"+wk+"/"].forEach(function(path){
+        var ref = fbDb.ref(path + pid);
+        ref.transaction(function(cur){
+          cur = cur || { name: name, avatar: avatar, wins: 0 };
+          cur.name = name; cur.avatar = avatar; cur.wins = (cur.wins || 0) + 1;
+          return cur;
+        });
+      });
+    });
+  }
+  function loadRemoteLeaderboard(tab){
+    if(!fbInit() || !fbDb) return Promise.resolve([]);
+    var path = tab === "global" ? "leaderboard_global"
+      : tab === "daily" ? "leaderboard_daily/" + todayKey()
+      : "leaderboard_weekly/" + (function(){ var d=new Date(); var onejan=new Date(d.getFullYear(),0,1); var week=Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7); return d.getFullYear()+"-W"+week; })();
+    return fbDb.ref(path).orderByChild("wins").limitToLast(10).once("value").then(function(snap){
+      var rows = [];
+      snap.forEach(function(child){ rows.push(child.val()); });
+      rows.sort(function(a,b){ return b.wins - a.wins; });
+      return rows;
+    }).catch(function(){ return []; });
+  }
+
+  /* ---------------- ONLINE MULTIPLAYER (room-based, Firebase RTDB) ---------------- */
+  var online = { room:null, code:null, isHost:false, myId: getPlayerId(), ref:null, unsub:null };
+
+  var onlineNameInput = document.getElementById("online-name-input");
+  var onlineAvatarRow = document.getElementById("online-avatar-row");
+  var onlineSelectedAvatar = AVATARS[0];
+  AVATARS.forEach(function(a){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "avatar-opt" + (a===onlineSelectedAvatar ? " active" : "");
+    b.textContent = a;
+    b.addEventListener("click", function(){
+      onlineSelectedAvatar = a;
+      Array.prototype.forEach.call(onlineAvatarRow.children, function(c){ c.classList.remove("active"); });
+      b.classList.add("active");
+    });
+    onlineAvatarRow.appendChild(b);
+  });
+  onlineNameInput.value = lsGet("sl_online_name", "Player");
+
+  if(FIREBASE_READY){
+    document.getElementById("online-unconfigured").classList.add("hidden");
+    document.getElementById("online-configured").classList.remove("hidden");
+  }
+
+  function genRoomCode(){ return String(Math.floor(100000 + Math.random()*900000)); }
+
+  function renderRoomLobby(data){
+    var list = document.getElementById("room-players-list");
+    var ids = Object.keys(data.players || {});
+    list.innerHTML = ids.map(function(id){
+      var p = data.players[id];
+      return '<div class="player-card"><span class="token-avatar">'+p.avatar+'</span><span class="pname">'+escapeHtml(p.name)+(id===data.hostId?" (Host)":"")+'</span></div>';
+    }).join("");
+    var startBtn = document.getElementById("room-start-btn");
+    if(online.isHost && ids.length >= 2){
+      startBtn.classList.remove("hidden");
+    } else {
+      startBtn.classList.add("hidden");
+    }
+  }
+
+  function watchRoom(code){
+    online.code = code;
+    online.ref = fbDb.ref("rooms/" + code);
+    online.unsub = online.ref.on("value", function(snap){
+      var data = snap.val();
+      if(!data) return;
+      var wasLobby = !online.room || online.room.status === "lobby";
+      online.room = data;
+      if(data.status === "lobby"){
+        renderRoomLobby(data);
+      } else if(data.status === "playing"){
+        if(wasLobby){ beginOnlineGame(data); }
+        else { applyRemoteGameState(data); }
+      }
+    });
+  }
+
+  document.getElementById("create-room-btn").addEventListener("click", function(){
+    if(!fbInit() || !fbDb){ setToastGlobal("Firebase isn't ready yet — check your connection and config."); return; }
+    var name = (onlineNameInput.value || "Player").trim() || "Player";
+    lsSet("sl_online_name", name);
+    var code = genRoomCode();
+    var roomData = {
+      hostId: online.myId, status:"lobby", boardDifficulty: "easy",
+      players: {}, order: [online.myId]
+    };
+    roomData.players[online.myId] = { name:name, avatar:onlineSelectedAvatar, pos:0, color: COLORS[0] };
+    fbDb.ref("rooms/" + code).set(roomData).then(function(){
+      online.isHost = true;
+      document.getElementById("room-lobby").classList.remove("hidden");
+      document.getElementById("room-code-display").textContent = code;
+      watchRoom(code);
+    });
+  });
+
+  document.getElementById("join-room-btn").addEventListener("click", function(){
+    if(!fbInit() || !fbDb){ setToastGlobal("Firebase isn't ready yet — check your connection and config."); return; }
+    var code = (document.getElementById("join-code-input").value || "").trim();
+    if(!/^\d{6}$/.test(code)){ setToastGlobal("Enter the 6-digit room code your friend shared."); return; }
+    var name = (onlineNameInput.value || "Player").trim() || "Player";
+    lsSet("sl_online_name", name);
+    var roomRef = fbDb.ref("rooms/" + code);
+    roomRef.get().then(function(snap){
+      var data = snap.val();
+      if(!data){ setToastGlobal("No room found with that code."); return; }
+      var ids = Object.keys(data.players || {});
+      if(ids.length >= 4){ setToastGlobal("That room is full (4 players max)."); return; }
+      var color = COLORS[ids.length] || COLORS[0];
+      roomRef.child("players/" + online.myId).set({ name:name, avatar:onlineSelectedAvatar, pos:0, color:color }).then(function(){
+        roomRef.child("order").set(ids.concat([online.myId]));
+        online.isHost = false;
+        document.getElementById("room-lobby").classList.remove("hidden");
+        document.getElementById("room-code-display").textContent = code;
+        watchRoom(code);
+      });
+    });
+  });
+
+  document.getElementById("room-leave-btn").addEventListener("click", function(){
+    if(online.ref){ online.ref.child("players/" + online.myId).remove(); if(online.unsub) online.ref.off("value", online.unsub); }
+    online = { room:null, code:null, isHost:false, myId: online.myId, ref:null, unsub:null };
+    document.getElementById("room-lobby").classList.add("hidden");
+  });
+
+  document.getElementById("room-start-btn").addEventListener("click", function(){
+    if(!online.ref) return;
+    online.ref.update({ status:"playing", currentTurnId: online.room.order[0], consecutiveSixes:0, history:[] });
+  });
+
+  function setToastGlobal(msg){
+    var t = document.getElementById("toast");
+    if(t) t.textContent = msg;
+    else alert(msg);
+  }
+
+  function beginOnlineGame(data){
+    if(!gameScreen.classList.contains("hidden")) return; // already in game
+    var order = data.order;
+    state.level = LEVELS[data.boardDifficulty || "easy"];
+    state.difficulty = data.boardDifficulty || "easy";
+    state.players = order.map(function(id, idx){
+      var p = data.players[id];
+      return { name:p.name, color: p.color || COLORS[idx], avatar:p.avatar, pos:0, el:null, uid:id };
+    });
+    state.currentIndex = 0;
+    state.consecutiveSixes = 0;
+    state.history = [];
+    setupScreen.classList.add("hidden");
+    startGame();
+    document.getElementById("roll-btn").disabled = (order[0] !== online.myId);
+  }
+
+  function applyRemoteGameState(data){
+    // A lightweight reconciliation: trust remote positions/currentIndex as source of truth.
+    if(!data.order || !state.players.length) return;
+    data.order.forEach(function(id, idx){
+      var p = data.players[id];
+      var local = state.players[idx];
+      if(local && p && local.pos !== p.pos){
+        local.pos = p.pos;
+        placeToken(idx, true);
+      }
+    });
+    var newIndex = data.order.indexOf(data.currentTurnId);
+    if(newIndex !== -1 && newIndex !== state.currentIndex){
+      state.currentIndex = newIndex;
+      updateTurnBanner();
+      renderPlayersList();
+    }
+    var myTurn = data.currentTurnId === online.myId;
+    document.getElementById("roll-btn").disabled = !myTurn || state.busy;
+  }
+
+  /* When playing online, doRoll() (defined later) pushes the authoritative
+     result to Firebase after resolving locally so every client stays in sync. */
+  function pushOnlineMove(){
+    if(state.mode !== "online" || !online.ref) return;
+    var updates = { currentTurnId: state.players[state.currentIndex].uid, consecutiveSixes: state.consecutiveSixes };
+    state.players.forEach(function(p){ updates["players/" + p.uid + "/pos"] = p.pos; });
+    online.ref.update(updates);
+  }
+
+  /* ---------------- SETUP SCREEN ---------------- */
+  var setupScreen = document.getElementById("setup-screen");
+  var gameScreen = document.getElementById("game-screen");
+  var playerRowsEl = document.getElementById("player-rows");
+  var playerCountRow = document.getElementById("player-count-row");
+  var difficultyRow = document.getElementById("difficulty-row");
+  var modeRow = document.getElementById("mode-row");
+  var aiDiffGroup = document.getElementById("ai-diff-group");
+  var aiDifficultyRow = document.getElementById("ai-difficulty-row");
+  var playerCountGroup = document.getElementById("player-count-group");
+
+  var playerAvatars = [];
+
+  function renderPlayerRows(){
+    playerRowsEl.innerHTML = "";
+    playerAvatars = playerAvatars.slice(0, state.numPlayers);
+    for(var i=0;i<state.numPlayers;i++){
+      if(!playerAvatars[i]) playerAvatars[i] = AVATARS[i % AVATARS.length];
+      var isAiSlot = (state.mode === "ai" && i === state.numPlayers - 1);
+      var row = document.createElement("div");
+      row.className = "player-row";
+      row.style.flexWrap = "wrap";
+
+      var dot = document.createElement("span");
+      dot.className = "token-dot";
+      dot.style.background = COLORS[i];
+      dot.style.display = "flex"; dot.style.alignItems = "center"; dot.style.justifyContent = "center"; dot.style.fontSize = "14px";
+      dot.textContent = playerAvatars[i];
+
+      var input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 16;
+      input.value = isAiSlot ? "AI Opponent" : ("Player " + (i+1));
+      input.id = "name-input-" + i;
+      if(isAiSlot) input.disabled = true;
+
+      row.appendChild(dot);
+      row.appendChild(input);
+
+      if(!isAiSlot){
+        var picker = document.createElement("div");
+        picker.className = "avatar-row";
+        picker.style.width = "100%";
+        (function(playerIdx){
+          AVATARS.forEach(function(avatar){
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "avatar-opt" + (avatar === playerAvatars[playerIdx] ? " active" : "");
+            b.textContent = avatar;
+            b.addEventListener("click", function(){
+              playerAvatars[playerIdx] = avatar;
+              renderPlayerRows();
+            });
+            picker.appendChild(b);
+          });
+        })(i);
+        row.appendChild(picker);
+      }
+      playerRowsEl.appendChild(row);
+    }
+  }
+
+  function applyModeUI(){
+    Array.prototype.forEach.call(modeRow.children, function(b){ b.classList.toggle("active", b.dataset.mode === state.mode); });
+    document.getElementById("panel-local-ai").classList.toggle("active", state.mode !== "online");
+    document.getElementById("panel-online").classList.toggle("active", state.mode === "online");
+    aiDiffGroup.style.display = state.mode === "ai" ? "block" : "none";
+    if(state.mode === "ai"){
+      state.numPlayers = 2;
+      playerCountGroup.style.display = "none";
+    } else {
+      playerCountGroup.style.display = "block";
+    }
+    renderPlayerRows();
+  }
+
+  modeRow.addEventListener("click", function(e){
+    var btn = e.target.closest(".pill-btn");
+    if(!btn) return;
+    state.mode = btn.dataset.mode;
+    applyModeUI();
+  });
+
+  aiDifficultyRow.addEventListener("click", function(e){
+    var btn = e.target.closest(".pill-btn");
+    if(!btn) return;
+    state.aiDifficulty = btn.dataset.ai;
+    Array.prototype.forEach.call(aiDifficultyRow.children, function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+  });
+
+  playerCountRow.addEventListener("click", function(e){
+    var btn = e.target.closest(".pill-btn");
+    if(!btn) return;
+    state.numPlayers = parseInt(btn.dataset.count, 10);
+    Array.prototype.forEach.call(playerCountRow.children, function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    renderPlayerRows();
+  });
+
+  difficultyRow.addEventListener("click", function(e){
+    var btn = e.target.closest(".pill-btn");
+    if(!btn) return;
+    state.difficulty = btn.dataset.diff;
+    Array.prototype.forEach.call(difficultyRow.children, function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+  });
+
+  playerCountRow.children[0].classList.add("active");
+  difficultyRow.children[0].classList.add("active");
+  applyModeUI();
+
+  document.getElementById("start-btn").addEventListener("click", function(){
+    state.players = [];
+    for(var i=0;i<state.numPlayers;i++){
+      var input = document.getElementById("name-input-" + i);
+      var isAiSlot = (state.mode === "ai" && i === state.numPlayers - 1);
+      var name = isAiSlot ? "AI Opponent" : ((input.value || "Player " + (i+1)).trim() || ("Player " + (i+1)));
+      state.players.push({ name: name, color: COLORS[i], avatar: isAiSlot ? "🤖" : playerAvatars[i], pos: 0, el: null, isAI: isAiSlot });
+    }
+    state.level = LEVELS[state.difficulty];
+    state.currentIndex = 0;
+    state.consecutiveSixes = 0;
+    state.history = [];
+    state.rollsThisGame = 0;
+    state.snakeHitsThisGame = 0;
+    startGame();
+  });
+
+  /* Resume a saved game, if one exists */
+  (function initResume(){
+    var saved = lsGet("sl_saved_game", null);
+    if(saved){
+      document.getElementById("resume-btn").classList.remove("hidden");
+      document.getElementById("resume-btn").addEventListener("click", function(){
+        Object.assign(state, saved);
+        setupScreen.classList.add("hidden");
+        startGame(true);
+      });
+    }
+  })();
+
+  /* ---------------- BOARD GEOMETRY ---------------- */
+  function squareRowCol(n){
+    var row = Math.floor((n-1)/10);
+    var posInRow = (n-1)%10;
+    var col = (row % 2 === 0) ? posInRow : (9 - posInRow);
+    return { row: row, col: col };
+  }
+  function squareCenter(n){
+    var rc = squareRowCol(n);
+    return { x: (rc.col + 0.5) * 10, y: (9 - rc.row + 0.5) * 10 };
+  }
+  function squareGridPos(n){
+    var rc = squareRowCol(n);
+    return { gridRow: 10 - rc.row, gridCol: rc.col + 1 };
+  }
+
+  /* ---------------- BOARD RENDER ---------------- */
+  var boardGrid = document.getElementById("board-grid");
+  var boardSvg = document.getElementById("board-svg");
+  var tokenLayer = document.getElementById("token-layer");
+  var diffTag = document.getElementById("diff-tag");
+
+  function buildBoard(){
+    boardGrid.innerHTML = "";
+    for(var n=1;n<=100;n++){
+      var rc = squareRowCol(n);
+      var gp = squareGridPos(n);
+      var sq = document.createElement("div");
+      sq.className = "square" + (((rc.row+rc.col)%2===1) ? " dark" : "");
+      if(n===1) sq.className += " start";
+      if(n===100) sq.className += " finish";
+      sq.style.gridRow = gp.gridRow;
+      sq.style.gridColumn = gp.gridCol;
+      sq.textContent = n;
+      boardGrid.appendChild(sq);
+    }
+    drawSnakesAndLadders();
+  }
+
+  function ladderMarkup(x1,y1,x2,y2){
+    var dx=x2-x1, dy=y2-y1;
+    var len=Math.hypot(dx,dy) || 1;
+    var px=-dy/len, py=dx/len;
+    var off = 1.6;
+    var l1x1=x1+px*off, l1y1=y1+py*off, l1x2=x2+px*off, l1y2=y2+py*off;
+    var l2x1=x1-px*off, l2y1=y1-py*off, l2x2=x2-px*off, l2y2=y2-py*off;
+    var svg = '<line class="ladder-rail" x1="'+l1x1+'" y1="'+l1y1+'" x2="'+l1x2+'" y2="'+l1y2+'"/>';
+    svg += '<line class="ladder-rail" x1="'+l2x1+'" y1="'+l2y1+'" x2="'+l2x2+'" y2="'+l2y2+'"/>';
+    var rungs = 6;
+    for(var i=1;i<rungs;i++){
+      var t = i/rungs;
+      var rax = l1x1 + (l1x2-l1x1)*t, ray = l1y1 + (l1y2-l1y1)*t;
+      var rbx = l2x1 + (l2x2-l2x1)*t, rby = l2y1 + (l2y2-l2y1)*t;
+      svg += '<line class="ladder-rung" x1="'+rax+'" y1="'+ray+'" x2="'+rbx+'" y2="'+rby+'"/>';
+    }
+    return svg;
+  }
+
+  function snakePathD(x1,y1,x2,y2){
+    var segments = 6;
+    var dx=x2-x1, dy=y2-y1;
+    var d = "M "+x1+" "+y1;
+    var plen = Math.hypot(dx,dy) || 1;
+    var px = -dy/plen, py = dx/plen;
+    for(var i=0;i<segments;i++){
+      var t0=i/segments, t1=(i+1)/segments;
+      var midT=(t0+t1)/2;
+      var ax=x1+dx*midT, ay=y1+dy*midT;
+      var amp = 3.4 * (i%2===0 ? 1 : -1);
+      var cx=ax+px*amp, cy=ay+py*amp;
+      var ex=x1+dx*t1, ey=y1+dy*t1;
+      d += " Q "+cx+" "+cy+" "+ex+" "+ey;
+    }
+    return d;
+  }
+
+  var SNAKE_PALETTES = [
+    { dark:"#5f211d", mid:"#9B3A34", light:"#e08a80" },
+    { dark:"#3d2352", mid:"#7a4a94", light:"#c9a4de" },
+    { dark:"#144033", mid:"#2f7a5c", light:"#8fd6b4" },
+    { dark:"#4a3306", mid:"#a8781f", light:"#f0c876" }
+  ];
+
+  function drawSnakesAndLadders(){
+    var svgParts = [];
+    var defsParts = [];
+    var ladders = state.level.ladders;
+    var snakes = state.level.snakes;
+    Object.keys(ladders).forEach(function(startStr){
+      var start = parseInt(startStr,10), end = ladders[startStr];
+      var p1 = squareCenter(start), p2 = squareCenter(end);
+      svgParts.push('<g>' + ladderMarkup(p1.x,p1.y,p2.x,p2.y) + '</g>');
+    });
+
+    var snakeIdx = 0;
+    Object.keys(snakes).forEach(function(headStr){
+      var head = parseInt(headStr,10), tail = snakes[headStr];
+      var p1 = squareCenter(head), p2 = squareCenter(tail);
+      var d = snakePathD(p1.x,p1.y,p2.x,p2.y);
+      var pal = SNAKE_PALETTES[snakeIdx % SNAKE_PALETTES.length];
+      snakeIdx++;
+
+      var dx = p2.x-p1.x, dy = p2.y-p1.y;
+      var len = Math.hypot(dx,dy) || 1;
+      var ux=dx/len, uy=dy/len, px=-uy, py=ux;
+      var width = 3.1;
+
+      // gradient perpendicular to the snake's overall direction, for a rounded "tube" look
+      var midX=(p1.x+p2.x)/2, midY=(p1.y+p2.y)/2;
+      var gid = "snakeGrad" + snakeIdx;
+      var gx1 = midX - px*width, gy1 = midY - py*width;
+      var gx2 = midX + px*width, gy2 = midY + py*width;
+      defsParts.push(
+        '<linearGradient id="'+gid+'" gradientUnits="userSpaceOnUse" x1="'+gx1+'" y1="'+gy1+'" x2="'+gx2+'" y2="'+gy2+'">' +
+        '<stop offset="0%" stop-color="'+pal.dark+'"/>' +
+        '<stop offset="45%" stop-color="'+pal.light+'"/>' +
+        '<stop offset="100%" stop-color="'+pal.dark+'"/>' +
+        '</linearGradient>'
+      );
+      var hgid = "headGrad" + snakeIdx;
+      defsParts.push(
+        '<radialGradient id="'+hgid+'" cx="35%" cy="32%" r="70%">' +
+        '<stop offset="0%" stop-color="'+pal.light+'"/>' +
+        '<stop offset="100%" stop-color="'+pal.dark+'"/>' +
+        '</radialGradient>'
+      );
+
+      // soft drop shadow beneath the whole body for lift off the board
+      svgParts.push('<path d="'+d+'" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="'+(width+1.1)+'" stroke-linecap="round" transform="translate(0.7,1.1)"/>');
+      // main gradient-filled tube body
+      svgParts.push('<path d="'+d+'" fill="none" stroke="url(#'+gid+')" stroke-width="'+width+'" stroke-linecap="round"/>');
+      // thin glossy highlight along one edge
+      svgParts.push('<path d="'+d+'" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="'+(width*0.26)+'" stroke-linecap="round" transform="translate('+(px*0.55)+','+(py*0.55)+')"/>');
+
+      // glossy 3D head
+      var hx = p1.x + ux*0.4, hy = p1.y + uy*0.4;
+      svgParts.push('<circle cx="'+hx+'" cy="'+hy+'" r="2.3" fill="url(#'+hgid+')" stroke="'+pal.dark+'" stroke-width="0.3"/>');
+
+      // eyes
+      var e1x=p1.x+ux*1.6+px*1.1, e1y=p1.y+uy*1.6+py*1.1;
+      var e2x=p1.x+ux*1.6-px*1.1, e2y=p1.y+uy*1.6-py*1.1;
+      svgParts.push('<circle class="snake-eye" cx="'+e1x+'" cy="'+e1y+'" r="0.85"/>');
+      svgParts.push('<circle class="snake-eye" cx="'+e2x+'" cy="'+e2y+'" r="0.85"/>');
+      svgParts.push('<circle class="snake-pupil" cx="'+e1x+'" cy="'+e1y+'" r="0.38"/>');
+      svgParts.push('<circle class="snake-pupil" cx="'+e2x+'" cy="'+e2y+'" r="0.38"/>');
+
+      // small forked tongue
+      var tgx = p1.x+ux*2.5, tgy = p1.y+uy*2.5;
+      svgParts.push('<line x1="'+hx+'" y1="'+hy+'" x2="'+tgx+'" y2="'+tgy+'" stroke="#d43f3f" stroke-width="0.25"/>');
+    });
+
+    boardSvg.innerHTML = '<defs>' + defsParts.join("") + '</defs>' + svgParts.join("");
+  }
+
+  /* ---------------- TOKENS ---------------- */
+  function tokenOffset(totalOnSquare, indexAmongThose){
+    if(totalOnSquare <= 1) return {dx:0, dy:0};
+    var angle = (indexAmongThose / totalOnSquare) * Math.PI * 2;
+    var r = 1.6;
+    return { dx: Math.cos(angle)*r, dy: Math.sin(angle)*r };
+  }
+  function playersOnSquare(n){
+    var list = [];
+    state.players.forEach(function(p, idx){ if(p.pos === n) list.push(idx); });
+    return list;
+  }
+  function placeToken(playerIndex, animated){
+    var p = state.players[playerIndex];
+    var square = p.pos === 0 ? 1 : p.pos;
+    var center = squareCenter(square);
+    var group = playersOnSquare(square);
+    var among = group.indexOf(playerIndex);
+    var off = tokenOffset(group.length, among);
+    if(!animated){ p.el.classList.remove("climbing","sliding"); }
+    p.el.style.left = (center.x + off.dx) + "%";
+    p.el.style.top = (center.y + off.dy) + "%";
+  }
+  function refreshAllTokenPositions(){
+    state.players.forEach(function(p, idx){ placeToken(idx, false); });
+  }
+
+  /* ---------------- GAME START ---------------- */
+  function startGame(isResume){
+    setupScreen.classList.add("hidden");
+    gameScreen.classList.remove("hidden");
+    diffTag.textContent = state.difficulty.charAt(0).toUpperCase() + state.difficulty.slice(1);
+
+    buildBoard();
+
+    tokenLayer.innerHTML = "";
+    state.players.forEach(function(p){
+      if(!isResume) p.pos = 0;
+      var el = document.createElement("div");
+      el.className = "token token-avatar";
+      el.style.background = p.color;
+      el.textContent = p.avatar || "";
+      tokenLayer.appendChild(el);
+      p.el = el;
+    });
+    refreshAllTokenPositions();
+
+    renderPlayersList();
+    updateTurnBanner();
+    setToast("");
+    historyListEl.innerHTML = "";
+    document.getElementById("roll-btn").disabled = false;
+
+    if(state.mode === "ai") maybeTriggerAiTurn();
+    if(state.mode === "online"){
+      document.getElementById("roll-btn").disabled = !online.room || state.players[state.currentIndex].uid !== online.myId;
+    }
+  }
+
+  function saveGameSnapshot(){
+    if(state.mode === "online") return; // online games aren't resumable locally
+    lsSet("sl_saved_game", {
+      mode: state.mode, aiDifficulty: state.aiDifficulty, numPlayers: state.numPlayers,
+      difficulty: state.difficulty, players: state.players.map(function(p){
+        return { name:p.name, color:p.color, avatar:p.avatar, pos:p.pos, isAI:p.isAI };
+      }),
+      currentIndex: state.currentIndex, consecutiveSixes: state.consecutiveSixes,
+      history: state.history, rollsThisGame: state.rollsThisGame, snakeHitsThisGame: state.snakeHitsThisGame,
+      level: state.level
+    });
+  }
+  document.getElementById("save-exit-btn").addEventListener("click", function(){
+    saveGameSnapshot();
+    setToast("Game saved — resume it from the home screen any time.");
+  });
+
+  /* ---------------- SIDE PANEL ---------------- */
+  var playersListEl = document.getElementById("players-list");
+  function renderPlayersList(){
+    playersListEl.innerHTML = "";
+    state.players.forEach(function(p, idx){
+      var card = document.createElement("div");
+      card.className = "player-card" + (idx===state.currentIndex ? " active" : "");
+      var dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = p.color;
+      var name = document.createElement("span");
+      name.className = "pname";
+      name.textContent = p.name;
+      var pos = document.createElement("span");
+      pos.className = "ppos";
+      pos.textContent = p.pos === 0 ? "Start" : ("Sq " + p.pos);
+      card.appendChild(dot); card.appendChild(name); card.appendChild(pos);
+      playersListEl.appendChild(card);
+    });
+  }
+
+  var turnDot = document.getElementById("turn-dot");
+  var turnName = document.getElementById("turn-name");
+  function updateTurnBanner(){
+    var p = state.players[state.currentIndex];
+    turnDot.style.background = p.color;
+    turnName.textContent = p.name + "'s turn";
+  }
+
+  var toastEl = document.getElementById("toast");
+  function setToast(msg){ toastEl.textContent = msg; }
+
+  var historyListEl = document.getElementById("history-list");
+  function addHistory(msg, color){
+    state.history.push(msg);
+    var item = document.createElement("div");
+    item.className = "history-item new";
+    item.style.borderLeftColor = color || "var(--panel-edge)";
+    item.textContent = msg;
+    historyListEl.appendChild(item);
+    Array.prototype.forEach.call(historyListEl.querySelectorAll(".history-item"), function(el){
+      el.classList.remove("new");
+    });
+    item.classList.add("new");
+    historyListEl.scrollTop = historyListEl.scrollHeight;
+  }
+
+  /* ---------------- 3D DICE ---------------- */
+  var PIP_PATTERNS = {
+    1: [4], 2: [0,8], 3: [0,4,8], 4: [0,2,6,8], 5: [0,2,4,6,8], 6: [0,2,3,5,6,8]
+  };
+  [1,2,3,4,5,6].forEach(function(v){
+    var face = document.getElementById("face-" + v);
+    var on = PIP_PATTERNS[v];
+    for(var i=0;i<9;i++){
+      var pip = document.createElement("span");
+      pip.className = "pip" + (on.indexOf(i) !== -1 ? " on" : "");
+      face.appendChild(pip);
+    }
+  });
+
+  var FACE_ROTATION = {
+    1: {x:0,y:0}, 2: {x:0,y:-90}, 3: {x:-90,y:0}, 4: {x:90,y:0}, 5: {x:0,y:90}, 6: {x:0,y:180}
+  };
+  var cube = document.getElementById("dice-cube");
+  var cubeX = 0, cubeY = 0;
+  function rollCubeTo(value){
+    var target = FACE_ROTATION[value];
+    var spinX = 360 * (2 + Math.floor(Math.random()*2));
+    var spinY = 360 * (2 + Math.floor(Math.random()*2));
+    cubeX += spinX;
+    cubeY += spinY;
+    var remX = ((cubeX % 360) + 360) % 360;
+    var remY = ((cubeY % 360) + 360) % 360;
+    var targetX = ((target.x % 360) + 360) % 360;
+    var targetY = ((target.y % 360) + 360) % 360;
+    cubeX += (targetX - remX);
+    cubeY += (targetY - remY);
+    cube.style.transform = "rotateX(" + cubeX + "deg) rotateY(" + cubeY + "deg)";
+  }
+
+  var rollBtn = document.getElementById("roll-btn");
+  rollBtn.addEventListener("click", function(){
+    if(state.busy) return;
+    doRoll();
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.code !== "Space") return;
+    if(gameScreen.classList.contains("hidden")) return;
+    if(!winOverlay.classList.contains("hidden")) return;
+    if(rollBtn.disabled) return;
+    e.preventDefault();
+    doRoll();
+  });
+
+  function vib(pattern){ if(navigator.vibrate){ try{ navigator.vibrate(pattern); }catch(e){} } }
+
+  function doRoll(){
+    state.busy = true;
+    rollBtn.disabled = true;
+    setToast("");
+    sfxRoll();
+    vib(15);
+    var finalValue = 1 + Math.floor(Math.random()*6);
+    rollCubeTo(finalValue);
+    setTimeout(function(){
+      handleRollResult(finalValue);
+    }, 900);
+  }
+
+  /* ---------------- MOVEMENT ---------------- */
+  function handleRollResult(value){
+    var player = state.players[state.currentIndex];
+
+    state.rollsThisGame++;
+    stats.totalRolls++; stats.sumDice += value; saveStats();
+
+    if(value === 6){ state.consecutiveSixes++; } else { state.consecutiveSixes = 0; }
+
+    if(value === 6 && state.consecutiveSixes === 3){
+      state.hadTripleSix = true;
+      setToast(player.name + " rolled three 6s in a row — turn forfeited!");
+      addHistory("🎲 " + player.name + " rolled 6, 6, 6 — turn forfeited.", player.color);
+      state.consecutiveSixes = 0;
+      endTurn(false);
+      return;
+    }
+
+    var current = player.pos;
+    var target = current + value;
+
+    if(target > 100){
+      setToast(player.name + " rolled " + value + " — needs exact roll, stays put.");
+      addHistory("🎲 " + player.name + " rolled " + value + " but overshot 100 — no move.", player.color);
+      endTurn(value === 6);
+      return;
+    }
+
+    animateSteps(player, current, target, function(){
+      var landed = target;
+      var ladders = state.level.ladders;
+      var snakes = state.level.snakes;
+
+      if(ladders[landed] !== undefined){
+        var top = ladders[landed];
+        if(top - landed > stats.highestLadder){ stats.highestLadder = top - landed; saveStats(); }
+        setToast(player.name + " found a ladder! Climbing to " + top + ".");
+        setTimeout(function(){
+          sfxLadder();
+          vib([10,40,10,40,20]);
+          player.pos = top;
+          player.el.classList.add("climbing");
+          placeToken(state.players.indexOf(player), true);
+          setTimeout(function(){
+            player.el.classList.remove("climbing");
+            addHistory("🎲 " + player.name + " rolled " + value + ", landed on " + landed + " → 🪜 ladder to " + top + ".", player.color);
+            finishMove(player, value);
+          }, 820);
+        }, 260);
+      } else if(snakes[landed] !== undefined){
+        var tail = snakes[landed];
+        state.snakeHitsThisGame++;
+        if(landed - tail > stats.biggestSnake){ stats.biggestSnake = landed - tail; saveStats(); }
+        setToast(player.name + " got bitten by a snake! Sliding to " + tail + ".");
+        setTimeout(function(){
+          sfxSnake();
+          vib(80);
+          player.pos = tail;
+          player.el.classList.add("sliding");
+          placeToken(state.players.indexOf(player), true);
+          setTimeout(function(){
+            player.el.classList.remove("sliding");
+            addHistory("🎲 " + player.name + " rolled " + value + ", landed on " + landed + " → 🐍 snake to " + tail + ".", player.color);
+            finishMove(player, value);
+          }, 920);
+        }, 260);
+      } else {
+        setToast(player.name + " moved to square " + landed + ".");
+        addHistory("🎲 " + player.name + " rolled " + value + " → square " + landed + ".", player.color);
+        finishMove(player, value);
+      }
+    });
+  }
+
+  function animateSteps(player, from, to, onDone){
+    var idx = state.players.indexOf(player);
+    var step = from;
+    function next(){
+      if(step >= to){ onDone(); return; }
+      step++;
+      player.pos = step;
+      placeToken(idx, false);
+      setTimeout(next, 210);
+    }
+    next();
+  }
+
+  function finishMove(player, rollValue){
+    renderPlayersList();
+    if(player.pos === 100){
+      declareWinner(player);
+      return;
+    }
+    endTurn(rollValue === 6);
+  }
+
+  function endTurn(extraTurn){
+    renderPlayersList();
+    if(!extraTurn){
+      state.consecutiveSixes = 0;
+      state.currentIndex = (state.currentIndex + 1) % state.players.length;
+      updateTurnBanner();
+      renderPlayersList();
+    }
+    saveGameSnapshot();
+    if(state.mode === "online") pushOnlineMove();
+    setTimeout(function(){
+      state.busy = false;
+      var current = state.players[state.currentIndex];
+      if(state.mode === "online"){
+        rollBtn.disabled = !online.room || current.uid !== online.myId;
+      } else {
+        rollBtn.disabled = false;
+      }
+      if(state.mode === "ai") maybeTriggerAiTurn();
+    }, 300);
+  }
+
+  /* ---------------- AI OPPONENT ---------------- */
+  function maybeTriggerAiTurn(){
+    var player = state.players[state.currentIndex];
+    if(!player || !player.isAI || state.busy) return;
+    rollBtn.disabled = true;
+    var isHard = state.aiDifficulty === "hard";
+    var delay = isHard ? (450 + Math.random()*450) : (1000 + Math.random()*900);
+    var lines = isHard
+      ? [player.name + " is rolling with confidence…", player.name + " doesn't hesitate…"]
+      : [player.name + " is thinking it over…", player.name + " takes a careful breath…"];
+    setToast(lines[Math.floor(Math.random()*lines.length)]);
+    setTimeout(function(){
+      if(state.players[state.currentIndex] === player && !state.busy){ doRoll(); }
+    }, delay);
+  }
+
+  /* ---------------- WIN ---------------- */
+  var winOverlay = document.getElementById("win-overlay");
+  var winTitle = document.getElementById("win-title");
+  var winSub = document.getElementById("win-sub");
+  var podiumEl = document.getElementById("podium");
+  var extraStandingsEl = document.getElementById("extra-standings");
+
+  function declareWinner(player){
+    renderPlayersList();
+    addHistory("🏆 " + player.name + " reached square 100 and won the game!", player.color);
+
+    var standings = state.players.slice().sort(function(a,b){ return b.pos - a.pos; });
+
+    winTitle.textContent = player.name + " wins!";
+    winSub.textContent = "Final standings for this game";
+
+    var order = [1,0,2];
+    var top3 = standings.slice(0,3);
+    podiumEl.innerHTML = "";
+    order.forEach(function(rankIdx){
+      var p = top3[rankIdx];
+      if(!p) return;
+      var col = document.createElement("div");
+      col.className = "podium-col rank" + (rankIdx+1);
+      var medal = document.createElement("div");
+      medal.className = "podium-medal";
+      medal.textContent = rankIdx===0 ? "🥇" : rankIdx===1 ? "🥈" : "🥉";
+      var name = document.createElement("div");
+      name.className = "podium-name";
+      name.textContent = p.name;
+      var bar = document.createElement("div");
+      bar.className = "podium-bar";
+      bar.style.background = p.color;
+      var pos = document.createElement("div");
+      pos.className = "podium-pos";
+      pos.textContent = "Sq " + p.pos;
+      col.appendChild(medal); col.appendChild(name); col.appendChild(bar); col.appendChild(pos);
+      podiumEl.appendChild(col);
+    });
+
+    extraStandingsEl.innerHTML = "";
+    standings.slice(3).forEach(function(p, i){
+      var row = document.createElement("div");
+      row.className = "extra-row";
+      var dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = p.color;
+      var label = document.createElement("span");
+      label.textContent = (i+4) + "th — " + p.name + " (Sq " + p.pos + ")";
+      row.appendChild(dot); row.appendChild(label);
+      extraStandingsEl.appendChild(row);
+    });
+
+    winOverlay.classList.remove("hidden");
+    sfxWin();
+    vib([30,50,30,50,120]);
+    recordWin(player.name, player.avatar);
+    lsDel("sl_saved_game");
+
+    // ---- stats / achievements ----
+    stats.gamesPlayed++;
+    var winnerIsHuman = !player.isAI;
+    if(winnerIsHuman){
+      stats.gamesWon++;
+      if(stats.fastestWin === null || state.rollsThisGame < stats.fastestWin) stats.fastestWin = state.rollsThisGame;
+      if(stats.gamesWon === 1) unlockAchievement("first_win");
+      if(stats.gamesWon >= 10) unlockAchievement("ten_wins");
+      if(state.rollsThisGame <= 20) unlockAchievement("speedrun");
+      if(state.snakeHitsThisGame >= 3) unlockAchievement("survivor");
+    }
+    if(state.hadTripleSix) unlockAchievement("lucky");
+    saveStats();
+    checkDailyChallenge(state.rollsThisGame, winnerIsHuman, state.snakeHitsThisGame);
+
+    loadConfetti().then(function(){
+      if(!window.confetti) return;
+      var burst = function(){ confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 }, colors: COLORS }); };
+      burst();
+      setTimeout(burst, 300);
+      setTimeout(burst, 600);
+    });
+
+    document.getElementById("share-score-btn").onclick = function(){
+      var text = player.name + " won a game of Snake & Ladder in " + state.rollsThisGame + " rolls! 🐍🪜 Play at " + location.href;
+      if(navigator.share){
+        navigator.share({ title:"Snake & Ladder", text:text, url: location.href }).catch(function(){});
+      } else if(navigator.clipboard){
+        navigator.clipboard.writeText(text).then(function(){ setToast("Result copied to clipboard!"); });
+      }
+    };
+  }
+
+  var confettiPromise = null;
+  function loadConfetti(){
+    if(window.confetti) return Promise.resolve();
+    if(confettiPromise) return confettiPromise;
+    confettiPromise = new Promise(function(resolve){
+      var s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.9.2/confetti.browser.min.js";
+      s.onload = resolve; s.onerror = resolve;
+      document.head.appendChild(s);
+    });
+    return confettiPromise;
+  }
+
+  document.getElementById("play-again-btn").addEventListener("click", function(){
+    winOverlay.classList.add("hidden");
+    gameScreen.classList.add("hidden");
+    setupScreen.classList.remove("hidden");
+  });
+
+  document.getElementById("restart-btn").addEventListener("click", function(){
+    gameScreen.classList.add("hidden");
+    setupScreen.classList.remove("hidden");
+  });
+
+  /* ---------------- DARK MODE ---------------- */
+  var themeBtn = document.getElementById("theme-btn");
+  function isDark(){ return document.documentElement.getAttribute("data-theme") === "dark"; }
+  function setThemeBtnIcon(){ themeBtn.textContent = isDark() ? "☀️" : "🌙"; }
+  setThemeBtnIcon();
+  themeBtn.addEventListener("click", function(){
+    var dark = !isDark();
+    if(dark){ document.documentElement.setAttribute("data-theme","dark"); }
+    else { document.documentElement.removeAttribute("data-theme"); }
+    localStorage.setItem("sl_theme", dark ? "dark" : "light");
+    setThemeBtnIcon();
+  });
+
+  /* ---------------- BOARD THEME PICKER ---------------- */
+  var boardThemeRow = document.getElementById("board-theme-row");
+  var savedBoardTheme = localStorage.getItem("sl_board_theme") || "classic";
+  Array.prototype.forEach.call(boardThemeRow.children, function(b){
+    b.classList.toggle("active", b.dataset.themeName === savedBoardTheme);
+  });
+  boardThemeRow.addEventListener("click", function(e){
+    var btn = e.target.closest(".pill-btn");
+    if(!btn) return;
+    var name = btn.dataset.themeName;
+    if(name === "classic") document.documentElement.removeAttribute("data-board-theme");
+    else document.documentElement.setAttribute("data-board-theme", name);
+    localStorage.setItem("sl_board_theme", name);
+    Array.prototype.forEach.call(boardThemeRow.children, function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+  });
+
+  /* ---------------- FULLSCREEN ---------------- */
+  var fsBtn = document.getElementById("fullscreen-btn");
+  if(!document.documentElement.requestFullscreen && !document.documentElement.webkitRequestFullscreen){
+    fsBtn.style.display = "none";
+  }
+  fsBtn.addEventListener("click", function(){
+    var el = document.documentElement;
+    if(!document.fullscreenElement){
+      (el.requestFullscreen || el.webkitRequestFullscreen).call(el).catch(function(){});
+      fsBtn.textContent = "⛶";
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+  });
+  document.addEventListener("fullscreenchange", function(){
+    fsBtn.textContent = document.fullscreenElement ? "🡼" : "⛶";
+  });
+
+  /* ---------------- PWA INSTALL ---------------- */
+  var deferredInstallPrompt = null;
+  var installBtn = document.getElementById("install-btn");
+  window.addEventListener("beforeinstallprompt", function(e){
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installBtn.classList.remove("hidden");
+  });
+  installBtn.addEventListener("click", function(){
+    if(!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.finally(function(){
+      deferredInstallPrompt = null;
+      installBtn.classList.add("hidden");
+    });
+  });
+  window.addEventListener("appinstalled", function(){ installBtn.classList.add("hidden"); });
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
